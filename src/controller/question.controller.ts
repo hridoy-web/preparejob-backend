@@ -5,38 +5,38 @@ import { Question } from "../models/question.model.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 
 // POST /api/v1/questions → createQuestion
-
-export const createQuestion= asyncHandler(async(req:Request,res:Response)=>{
-const {title, technology, difficulty, importanceTag,easyAnswer,advancedAnswer, } = req.body;
-
-if(!title || !technology || !easyAnswer || !easyAnswer.explanation){
-    throw new ApiError(400,"Title, Technology and easyAnswer explanation are required");
-}
-
-
-    const question = await Question.create({
-        title,
+export const createQuestion = asyncHandler(async (req: Request, res: Response) => {
+  const {
+    title,
     technology,
     difficulty,
     importanceTag,
     easyAnswer,
     advancedAnswer,
-    })
+  } = req.body;
 
-    return res.status(201).json(
-       new ApiResponse(201,question,"Question added Succesfully")
-    )
+  if (!title || !technology || !easyAnswer || !easyAnswer.explanation) {
+    throw new ApiError(
+      400,
+      "Title, Technology and easyAnswer explanation are required"
+    );
+  }
 
-})
+  const question = await Question.create({
+    title,
+    technology,
+    difficulty,
+    importanceTag,
+    easyAnswer,
+    advancedAnswer,
+  });
 
-
-
-
-
-// Purpose: Create a new question from the Admin Dashboard
+  return res.status(201).json(
+    new ApiResponse(201, question, "Question added successfully")
+  );
+});
 
 // GET /api/v1/questions → getAllQuestions
-
 export const getAllQuestions = asyncHandler(async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
   const limit = parseInt(req.query.limit as string) || 10;
@@ -69,69 +69,55 @@ export const getAllQuestions = asyncHandler(async (req: Request, res: Response) 
     },
   };
 
-  return res.status(200).json(new ApiResponse(200, responseData, 'Questions fetched successfully'));
+  return res.status(200).json(
+    new ApiResponse(200, responseData, "Questions fetched successfully")
+  );
 });
-
-// Purpose: Fetch all questions with pagination and sorting for Explore page & Admin table
 
 // GET /api/v1/questions/:id → getQuestionById
-
 export const getQuestionById = asyncHandler(async (req: Request, res: Response) => {
-    const {id} = req.params;
-    const question = await Question.findById(id);
+  const { id } = req.params;
 
-    if(!question){
-        throw new ApiError(404, 'Question not found with this id');
-    }
+  const question = await Question.findById(id);
 
-    res.status(200).json(new ApiResponse(200,question,"Question is Fetched Successfully"));
+  if (!question) {
+    throw new ApiError(404, "Question not found with this id");
+  }
+
+  return res.status(200).json(
+    new ApiResponse(200, question, "Question fetched successfully")
+  );
 });
-
-// Purpose: Retrieve details and answer for a single question
 
 // PUT /api/v1/questions/:id → updateQuestion
+export const updateQuestion = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
 
-export const updatedQuestion = asyncHandler(async(req: Request, res: Response)=>{
-    const {id} = req.params;
-    const updatedQuestion = await Question.findByIdAndUpdate(id,req.body,{
-        new:true,
-        runValidators : true,
-    });
+  const updatedQuestion = await Question.findByIdAndUpdate(id, req.body, {
+    new: true,
+    runValidators: true,
+  });
 
+  if (!updatedQuestion) {
+    throw new ApiError(404, "Question not found to update");
+  }
 
-    if(!updatedQuestion){
-       throw new ApiError(404,"Question not found to update");
-    }
-
-    res.status(200).json(
-        new ApiResponse(200, updatedQuestion, "Question updated successfully")
-    );
-
-
-
+  return res.status(200).json(
+    new ApiResponse(200, updatedQuestion, "Question updated successfully")
+  );
 });
 
-// Purpose: Update an existing question from the Admin Dashboard
-
 // DELETE /api/v1/questions/:id → deleteQuestion
+export const deleteQuestion = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
 
+  const deletedQuestion = await Question.findByIdAndDelete(id);
 
-export const deleteQuestion = asyncHandler(async(req: Request, res: Response)=>{
-    const {id} = req.params;
+  if (!deletedQuestion) {
+    throw new ApiError(404, "Question not found to delete");
+  }
 
-    const deleteQuestion = await Question.findByIdAndDelete(id);
-
-    if(!deleteQuestion){
-      throw  new ApiError(404,"Question not found to delete")
-    };
-
-    res.status(200).json(
-      new  ApiResponse(200,"Question deleted Succesfully")
-    );
-
-})
-
-// Purpose: Delete a question from the database
-
-
-// export default {createQuestion, getAllQuestions, getQuestionById}
+  return res.status(200).json(
+    new ApiResponse(200, deletedQuestion, "Question deleted successfully")
+  );
+});
