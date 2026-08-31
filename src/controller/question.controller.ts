@@ -84,27 +84,27 @@ export const getQuestionById = asyncHandler(async (req: Request, res: Response) 
         throw new ApiError(404, 'Question not found with this id');
     }
 
-    res.status(201).json(new ApiResponse(201,question,"Question is Fetched Successfully"));
+    res.status(200).json(new ApiResponse(200,question,"Question is Fetched Successfully"));
 });
 
 // Purpose: Retrieve details and answer for a single question
 
 // PUT /api/v1/questions/:id → updateQuestion
 
-export const updateQuestion = asyncHandler(async(req: Request, res: Response)=>{
+export const updatedQuestion = asyncHandler(async(req: Request, res: Response)=>{
     const {id} = req.params;
     const updatedQuestion = await Question.findByIdAndUpdate(id,req.body,{
-        success:true,
+        new:true,
         runValidators : true,
     });
 
 
-    if(!updateQuestion){
-        new ApiError(404,"Question not found to update");
+    if(!updatedQuestion){
+       throw new ApiError(404,"Question not found to update");
     }
 
-    res.status(201).json(
-        new ApiResponse(201,"Updated Question Successfully")
+    res.status(200).json(
+        new ApiResponse(200, updatedQuestion, "Question updated successfully")
     );
 
 
@@ -119,14 +119,14 @@ export const updateQuestion = asyncHandler(async(req: Request, res: Response)=>{
 export const deleteQuestion = asyncHandler(async(req: Request, res: Response)=>{
     const {id} = req.params;
 
-    const deletequestion = await Question.findByIdAndDelete(id);
+    const deleteQuestion = await Question.findByIdAndDelete(id);
 
     if(!deleteQuestion){
-        new ApiError(404,"Question not found to delete")
+      throw  new ApiError(404,"Question not found to delete")
     };
 
-    res.status(201).json(
-      new  ApiResponse(201,"Question deleted Succesfully")
+    res.status(200).json(
+      new  ApiResponse(200,"Question deleted Succesfully")
     );
 
 })
