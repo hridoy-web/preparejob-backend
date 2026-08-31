@@ -2,10 +2,11 @@ import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 
 // Import Routes
-import questionRouter from './routes/question.routes.js'
+// import questionRouter from './routes/question.routes.js'
 import blogRouter from './routes/blog.routes.js';
 import userRouter from './routes/user.routes.js';
 import adminRouter from './routes/admin.routes.js';
+import questionRouter from './routes/question.routes.js';
 
 const app: Application = express();
 
