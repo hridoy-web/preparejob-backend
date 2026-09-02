@@ -3,7 +3,7 @@ import { Blog } from '../models/blog.model.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
-import { uploadOnCloudinary } from '../utils/cloudinary.js';
+import { deleteFromCloudinary, uploadOnCloudinary } from '../utils/cloudinary.js';
 
 /** Converts a title into a URL-safe slug. Pure string function, no DB access. */
 const slugify = (text: string): string =>
@@ -34,33 +34,64 @@ const generateUniqueSlug = async (title: string, excludeId?: string): Promise<st
 export const createBlog = asyncHandler(async (req: Request, res: Response) => {
   const { title, content, category, readTime } = req.body;
 
-  if (!title?.trim() || !content?.trim() || !category?.trim()) {
+   if (typeof title !== 'string' || typeof content !== 'string' || typeof category !== 'string') {
+    throw new ApiError(400, 'title, content and category must be strings');
+  }
+   if (readTime !== undefined && typeof readTime !== 'string') {
+    throw new ApiError(400, 'readTime must be a string');
+  }
+
+  const trimmedTitle = title.trim();
+  const trimmedContent = content.trim();
+  const trimmedCategory = category.trim();
+  const trimmedReadTime = typeof readTime === 'string' ? readTime.trim() : undefined;
+
+
+  if (!trimmedTitle || !trimmedContent || !trimmedCategory) {
     throw new ApiError(400, 'title, content and category are required');
   }
+
   if (!req.file) {
     throw new ApiError(400, 'A banner image is required');
   }
+  
+  let slug = await generateUniqueSlug(trimmedTitle);
 
   const uploadResult = await uploadOnCloudinary(req.file.path);
   if (!uploadResult) {
     throw new ApiError(500, 'Failed to upload banner image');
   }
+  const MAX_SLUG_RETRIES = 3;
+  let attempt = 0;
 
-  const slug = await generateUniqueSlug(title);
+   while (true) {
+    try {
+      const blog = await Blog.create({
+        title: trimmedTitle,
+        slug,
+        content: trimmedContent,
+        category: trimmedCategory,
+        bannerImage: { url: uploadResult.secure_url, publicId: uploadResult.public_id },
+        ...(trimmedReadTime ? { readTime: trimmedReadTime } : {}),
+      });
 
-  const blog = await Blog.create({
-    title: title.trim(),
-    slug,
-    content,
-    category: category.trim(),
-    bannerImage: uploadResult.secure_url,
-    // Omit the key entirely if the client didn't send one, so Mongoose's
-    // schema default ('5 min read') applies instead of storing an empty string.
-    ...(readTime?.trim() ? { readTime: readTime.trim() } : {}),
-  });
+      // 5. Success
+      return res.status(201).json(new ApiResponse(201, blog, 'Blog created successfully'));
+    } catch (error: any) {
+      const isDuplicateSlug = error?.code === 11000 && error?.keyPattern?.slug;
 
-  return res.status(201).json
-  (new ApiResponse(201, blog, 'Blog created successfully'));
+      if (isDuplicateSlug && attempt < MAX_SLUG_RETRIES) {
+        attempt += 1;
+        slug = await generateUniqueSlug(trimmedTitle);
+        continue;
+      }
+      await deleteFromCloudinary(uploadResult.public_id);
+
+      throw isDuplicateSlug
+        ? new ApiError(409, 'Could not generate a unique slug, please try again')
+        : (error instanceof Error ? error : new ApiError(500, 'Failed to create blog'));
+    }
+  }
 });
 
 
