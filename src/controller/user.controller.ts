@@ -15,12 +15,15 @@ export const toggleBookmark = asyncHandler(async (req: Request, res: Response) =
     throw new ApiError(400, 'userId and questionId are required');
   }
 
+  if (!mongoose.Types.ObjectId.isValid(questionId)) {
+    throw new ApiError(400, 'Invalid questionId format');
+  }
   const user = await User.findById(userId);
   if (!user) {
     throw new ApiError(404, 'User not found');
   }
-
   const questionObjectId = new mongoose.Types.ObjectId(questionId);
+ 
    const question = await Question.findById(questionObjectId);
   if (!question) {
     throw new ApiError(404, 'Question not found');
@@ -82,7 +85,7 @@ export const getUserLikedBlogs = asyncHandler(async (req: Request, res: Response
 export const getUserCommentedBlogs = asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.params;
 
-  const commentedBlogs = await Blog.find({ 'comments.user': userId });
+  const commentedBlogs = await Blog.find({ 'comments.userId': userId });
 
   return res.status(200).json(
     new ApiResponse(200, commentedBlogs, 'Commented blogs fetched successfully')
