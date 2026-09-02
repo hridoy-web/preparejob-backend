@@ -49,9 +49,15 @@ const blogSchema = new Schema<IBlog>(
       type: String,
       required: [true, 'Blog content is required'],
     },
-    bannerImage: {
-      type: String,
-      required: [true, 'Banner image URL is required'],
+   bannerImage: {
+      url: {
+         type: String,
+         required: [true, 'Banner image URL is required']
+           },
+      publicId: {
+         type: String,
+         required: [true, 'Banner image publicId is required'] 
+       },
     },
     category: {
       type: String,
