@@ -18,9 +18,17 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 
+// Interface extension if your Auth Middleware attaches user data to req.user
+interface AuthenticatedRequest extends Request {
+  user?: {
+    _id: string;
+    id?: string;
+    role: string;
+  };
+}
+
 // GET /api/v1/admin/stats → getAdminStats
 export const getAdminStats = asyncHandler(async (req: Request, res: Response) => {
-  // Count documents across all primary collections concurrently
   const [totalUsers, totalQuestions, totalBlogs] = await Promise.all([
     User.countDocuments(),
     Question.countDocuments(),
@@ -73,8 +81,16 @@ export const getAllUsers = asyncHandler(async (req: Request, res: Response) => {
 });
 
 // PATCH /api/v1/admin/users/:id/status → toggleUserStatus
-export const toggleUserStatus = asyncHandler(async (req: Request, res: Response) => {
+export const toggleUserStatus = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
+
+  // Retrieve current admin ID from Auth Middleware (req.user) or request payload (req.body.adminId)
+  const currentAdminId = req.user?._id?.toString() || req.body.adminId;
+
+  // 🔒 Security Check: Prevent admins from blocking themselves
+  if (currentAdminId && currentAdminId === id) {
+    throw new ApiError(400, 'You cannot block or modify your own account status');
+  }
 
   const user = await User.findById(id);
   if (!user) {
@@ -95,8 +111,16 @@ export const toggleUserStatus = asyncHandler(async (req: Request, res: Response)
 });
 
 // DELETE /api/v1/admin/users/:id → deleteUser
-export const deleteUser = asyncHandler(async (req: Request, res: Response) => {
+export const deleteUser = asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
+
+  // Retrieve current admin ID from Auth Middleware (req.user) or request payload (req.body.adminId)
+  const currentAdminId = req.user?._id?.toString() || req.body.adminId;
+
+  // 🔒 Security Check: Prevent admins from deleting their own account
+  if (currentAdminId && currentAdminId === id) {
+    throw new ApiError(400, 'You cannot delete your own admin account');
+  }
 
   const deletedUser = await User.findByIdAndDelete(id);
   if (!deletedUser) {
