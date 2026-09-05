@@ -4,6 +4,12 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { deleteFromCloudinary, uploadOnCloudinary } from '../utils/cloudinary.js';
+import { PipelineStage } from 'mongoose';
+
+const MAX_LIMIT = 50;
+const DEFAULT_LIMIT = 10;
+const SORTABLE_FIELDS = ['createdAt', 'title'] as const;
+type SortableField = (typeof SORTABLE_FIELDS)[number];
 
 /** Converts a title into a URL-safe slug. Pure string function, no DB access. */
 const slugify = (text: string): string =>
@@ -28,6 +34,8 @@ const generateUniqueSlug = async (title: string, excludeId?: string): Promise<st
   return slug;
 };
 
+const normalizeCategory = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, ' ');
+
 // ---------------------------------------------------------------------------
 // POST /api/v1/blogs   
 // ---------------------------------------------------------------------------
@@ -43,7 +51,7 @@ export const createBlog = asyncHandler(async (req: Request, res: Response) => {
 
   const trimmedTitle = title.trim();
   const trimmedContent = content.trim();
-  const trimmedCategory = category.trim();
+  const trimmedCategory = normalizeCategory(category);
   const trimmedReadTime = typeof readTime === 'string' ? readTime.trim() : undefined;
 
 
@@ -75,7 +83,7 @@ export const createBlog = asyncHandler(async (req: Request, res: Response) => {
         ...(trimmedReadTime ? { readTime: trimmedReadTime } : {}),
       });
 
-      // 5. Success
+      // Success
       return res.status(201).json(new ApiResponse(201, blog, 'Blog created successfully'));
     } catch (error: any) {
       const isDuplicateSlug = error?.code === 11000 && error?.keyPattern?.slug;
@@ -97,6 +105,127 @@ export const createBlog = asyncHandler(async (req: Request, res: Response) => {
 
 // GET /api/v1/blogs → getAllBlogs
 // Purpose: Fetch all blog posts with pagination for Blog grid & Admin table
+const parsePositiveInt = (value: unknown, fallback: number): number => {
+  if (typeof value !== 'string') return fallback;
+
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return fallback; // rejects floats, negatives, letters, exponents, empty string
+
+  const parsed = Number(trimmed);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) return fallback;
+
+  return parsed;
+};
+
+const getStringQueryParam = (value: unknown): string | undefined =>
+  typeof value === 'string' ? value : undefined;
+
+/** Type-predicate guard - the correct way to narrow to SortableField without an `as` assertion. */
+const isSortableField = (value: string): value is SortableField =>
+  (SORTABLE_FIELDS as readonly string[]).includes(value);
+
+const MAX_SKIP = 10_000; // ~1,000 pages at the default limit of 10
+
+export const getAllBlogs = asyncHandler(async (req: Request, res: Response) => {
+  const page = parsePositiveInt(req.query.page, 1);
+  const limit = Math.min(parsePositiveInt(req.query.limit, DEFAULT_LIMIT), MAX_LIMIT);
+
+  const skip = (page - 1) * limit;
+  if (skip > MAX_SKIP) {
+    throw new ApiError(400, 'Page number too large - please refine your search or filters');
+  }
+
+  const search = getStringQueryParam(req.query.search)?.trim();
+
+  const rawCategory = getStringQueryParam(req.query.category);
+  const category = rawCategory ? normalizeCategory(rawCategory) : undefined;
+
+  const orderParam = getStringQueryParam(req.query.order);
+  const order: 1 | -1 = orderParam === 'asc' ? 1 : -1;
+
+  const requestedSort = getStringQueryParam(req.query.sort);
+  const hasValidRequestedSort = requestedSort !== undefined && isSortableField(requestedSort);
+  const sortField: SortableField = hasValidRequestedSort ? requestedSort : 'createdAt';
+
+  const match: Record<string, unknown> = {};
+  if (category) match.category = category;
+  if (search) match.$text = { $search: search };
+
+  const sortStage: Record<string, 1 | -1 | { $meta: 'textScore' }> =
+    search && !hasValidRequestedSort
+      ? { score: { $meta: 'textScore' } }
+      : { [sortField]: order };
+
+  const pipeline: PipelineStage[] = [
+    { $match: match },
+    {
+      $addFields: {
+        likesCount: { $size: { $ifNull: ['$likes', []] } },
+        commentsCount: { $size: { $ifNull: ['$comments', []] } },
+      },
+    },
+    ...(search ? [{ $addFields: { score: { $meta: 'textScore' } } }] : []),
+    { $sort: sortStage },
+    {
+      $facet: {
+        metadata: [{ $count: 'total' }],
+        data: [
+          { $skip: skip },
+          { $limit: limit },
+          {
+            $project: {
+              title: 1,
+              slug: 1,
+              bannerImage: 1,
+              category: 1,
+              readTime: 1,
+              likesCount: 1,
+              commentsCount: 1,
+              createdAt: 1,
+              excerpt: {
+                $cond: {
+                  if: { $gt: [{ $strLenCP: '$content' }, 180] },
+                  then: { $concat: [{ $substrCP: ['$content', 0, 180] }, '...'] },
+                  else: '$content',
+                },
+              },
+            },
+          },
+        ],
+      },
+    },
+  ];
+
+  let result;
+  try {
+    [result] = await Blog.aggregate(pipeline);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '';
+    if (message.includes('text index required')) {
+      throw new ApiError(500, 'Search is temporarily unavailable - missing search index');
+    }
+    throw error;
+  }
+
+  const total = result.metadata[0]?.total || 0;
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        blogs: result.data,
+        pagination: {
+          page,
+          limit,
+          totalItems: total,
+          totalPages: Math.ceil(total / limit) || 1,
+        },
+      },
+      'Blogs fetched successfully'
+    )
+  );
+});
+
 
 // GET /api/v1/blogs/:slug → getBlogBySlug
 // Purpose: Retrieve a single blog post using its SEO-friendly slug
