@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IComment {
+  _id?: mongoose.Types.ObjectId;
   userId: string;
   userName: string;
   userImage?: string;
@@ -8,11 +9,16 @@ export interface IComment {
   createdAt?: Date;
 }
 
+export interface IBannerImage {
+  url: string;
+  publicId: string;
+}
+
 export interface IBlog extends Document {
   title: string;
   slug: string;
   content: string;
-  bannerImage: string;
+  bannerImage: IBannerImage;
   category: string;
   readTime: string;
   likes: string[];
@@ -49,15 +55,15 @@ const blogSchema = new Schema<IBlog>(
       type: String,
       required: [true, 'Blog content is required'],
     },
-   bannerImage: {
+    bannerImage: {
       url: {
-         type: String,
-         required: [true, 'Banner image URL is required']
-           },
+        type: String,
+        required: [true, 'Banner image URL is required'],
+      },
       publicId: {
-         type: String,
-         required: [true, 'Banner image publicId is required'] 
-       },
+        type: String,
+        required: [true, 'Banner image publicId is required'],
+      },
     },
     category: {
       type: String,
@@ -73,5 +79,10 @@ const blogSchema = new Schema<IBlog>(
   },
   { timestamps: true }
 );
+
+blogSchema.index({
+  title: 'text',
+  content: 'text',
+});
 
 export const Blog = mongoose.models.Blog || mongoose.model<IBlog>('Blog', blogSchema);

@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { getUserBookmarks, getUserCommentedBlogs, getUserLikedBlogs, toggleBookmark } from '../controller/user.controller.js';
+import { 
+  getUserBookmarks, 
+  getUserCommentedBlogs, 
+  getUserLikedBlogs, 
+  toggleBookmark 
+} from '../controller/user.controller.js';
 
 const router = Router();
 
