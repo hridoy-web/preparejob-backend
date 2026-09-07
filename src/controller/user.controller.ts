@@ -82,12 +82,5 @@ export const getUserLikedBlogs = asyncHandler(async (req: Request, res: Response
 });
 
 // GET /api/v1/user/commented-blogs/:userId → getUserCommentedBlogs
-export const getUserCommentedBlogs = asyncHandler(async (req: Request, res: Response) => {
-  const { userId } = req.params;
+// Purpose: Track and list all blog posts where the user has commented
 
-  const commentedBlogs = await Blog.find({ 'comments.userId': userId });
-
-  return res.status(200).json(
-    new ApiResponse(200, commentedBlogs, 'Commented blogs fetched successfully')
-  );
-});

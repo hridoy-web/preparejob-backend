@@ -8,11 +8,16 @@ export interface IComment {
   createdAt?: Date;
 }
 
+export interface IBannerImage {
+  url: string;
+  publicId: string;
+}
+
 export interface IBlog extends Document {
   title: string;
   slug: string;
   content: string;
-  bannerImage: string;
+  bannerImage: IBannerImage;
   category: string;
   readTime: string;
   likes: string[];
@@ -73,5 +78,10 @@ const blogSchema = new Schema<IBlog>(
   },
   { timestamps: true }
 );
+
+blogSchema.index({
+  title: 'text',
+  content: 'text' 
+  });
 
 export const Blog = mongoose.models.Blog || mongoose.model<IBlog>('Blog', blogSchema);
