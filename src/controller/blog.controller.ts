@@ -236,19 +236,15 @@ export const getAllBlogs = asyncHandler(async (req: Request, res: Response) => {
 // GET /api/v1/blogs/:slug → getBlogBySlug
 // Purpose: Retrieve a single blog post using its SEO-friendly slug
 
-const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-const getSingleParam = (value: string | string[] | undefined): string | undefined =>
-  Array.isArray(value) ? value[0] : value;
-
 export const getBlogBySlug = asyncHandler(async (req: BlogRequest, res: Response) => {
-  const rawSlug = getSingleParam(req.params.slug);
-  const slug = rawSlug?.trim().toLowerCase();
+  const { slug } = req.params;
 
-  if (!slug || !SLUG_PATTERN.test(slug)) {
-    throw new ApiError(400, 'Invalid slug format');
+  if (!slug || typeof slug !== 'string') {
+    throw new ApiError(400, 'Slug is required');
   }
+  const normalizedSlug = slug.trim().toLowerCase();
 
-  const blog = await Blog.findOne({ slug });
+  const blog = await Blog.findOne({ slug: normalizedSlug });
   if (!blog) {
     throw new ApiError(404, 'Blog not found');
   }
@@ -262,6 +258,10 @@ export const getBlogBySlug = asyncHandler(async (req: BlogRequest, res: Response
 
   return res.status(200).json(new ApiResponse(200, responseBody, 'Blog fetched successfully'));
 });
+
+
+// PUT /api/v1/blogs/:id → updateBlog
+// Purpose: Update blog content or cover image
 
 
 // DELETE /api/v1/blogs/:id → deleteBlog
