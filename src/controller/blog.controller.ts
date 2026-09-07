@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import fs from 'fs';
 import { Blog } from '../models/blog.model.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -11,7 +12,11 @@ const MAX_LIMIT = 50;
 const DEFAULT_LIMIT = 10;
 const SORTABLE_FIELDS = ['createdAt', 'title'] as const;
 type SortableField = (typeof SORTABLE_FIELDS)[number];
-type BlogRequest = Request & { user?: IUser };
+
+export interface BlogRequest extends Request {
+  user?: IUser;
+  file?: Express.Multer.File;
+}
 
 const isValidObjectId = (id: string) => Types.ObjectId.isValid(id);
 
@@ -20,9 +25,9 @@ const slugify = (text: string): string =>
     .toString()
     .trim()
     .toLowerCase()
-    .replace(/[^\w\s-]/g, '') 
-    .replace(/[\s_]+/g, '-') 
-    .replace(/^-+|-+$/g, ''); 
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 
 const generateUniqueSlug = async (title: string, excludeId?: string): Promise<string> => {
   const base = slugify(title);
@@ -42,45 +47,44 @@ const generateUniqueSlug = async (title: string, excludeId?: string): Promise<st
   return slug;
 };
 
-const normalizeCategory = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, ' ');
+const normalizeCategory = (value: string): string => value.trim().replace(/\s+/g, ' ');
 
 // ---------------------------------------------------------------------------
-// POST /api/v1/blogs   
+// POST /api/v1/blogs (Admin Dashboard)
 // ---------------------------------------------------------------------------
-export const createBlog = asyncHandler(async (req: Request, res: Response) => {
+export const createBlog = asyncHandler(async (req: BlogRequest, res: Response) => {
   const { title, content, category, readTime } = req.body;
 
-   if (typeof title !== 'string' || typeof content !== 'string' || typeof category !== 'string') {
+  if (typeof title !== 'string' || typeof content !== 'string' || typeof category !== 'string') {
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     throw new ApiError(400, 'title, content and category must be strings');
-  }
-   if (readTime !== undefined && typeof readTime !== 'string') {
-    throw new ApiError(400, 'readTime must be a string');
   }
 
   const trimmedTitle = title.trim();
   const trimmedContent = content.trim();
   const trimmedCategory = normalizeCategory(category);
-  const trimmedReadTime = typeof readTime === 'string' ? readTime.trim() : undefined;
-
+  const trimmedReadTime = typeof readTime === 'string' && readTime.trim() ? readTime.trim() : undefined;
 
   if (!trimmedTitle || !trimmedContent || !trimmedCategory) {
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     throw new ApiError(400, 'title, content and category are required');
   }
 
   if (!req.file) {
     throw new ApiError(400, 'A banner image is required');
   }
-  
+
   let slug = await generateUniqueSlug(trimmedTitle);
 
   const uploadResult = await uploadOnCloudinary(req.file.path);
   if (!uploadResult) {
     throw new ApiError(500, 'Failed to upload banner image');
   }
+
   const MAX_SLUG_RETRIES = 3;
   let attempt = 0;
 
-   while (true) {
+  while (true) {
     try {
       const blog = await Blog.create({
         title: trimmedTitle,
@@ -100,18 +104,21 @@ export const createBlog = asyncHandler(async (req: Request, res: Response) => {
         slug = await generateUniqueSlug(trimmedTitle);
         continue;
       }
+
       await deleteFromCloudinary(uploadResult.public_id);
 
       throw isDuplicateSlug
         ? new ApiError(409, 'Could not generate a unique slug, please try again')
-        : (error instanceof Error ? error : new ApiError(500, 'Failed to create blog'));
+        : error instanceof Error
+        ? error
+        : new ApiError(500, 'Failed to create blog');
     }
   }
 });
 
-
-// GET /api/v1/blogs → getAllBlogs
-// Purpose: Fetch all blog posts with pagination for Blog grid & Admin table
+// ---------------------------------------------------------------------------
+// GET /api/v1/blogs (Blog Grid & Admin Table)
+// ---------------------------------------------------------------------------
 const parsePositiveInt = (value: unknown, fallback: number): number => {
   if (typeof value !== 'string') return fallback;
 
@@ -142,7 +149,6 @@ export const getAllBlogs = asyncHandler(async (req: Request, res: Response) => {
   }
 
   const search = getStringQueryParam(req.query.search)?.trim();
-
   const rawCategory = getStringQueryParam(req.query.category);
   const category = rawCategory ? normalizeCategory(rawCategory) : undefined;
 
@@ -154,7 +160,11 @@ export const getAllBlogs = asyncHandler(async (req: Request, res: Response) => {
   const sortField: SortableField = hasValidRequestedSort ? requestedSort : 'createdAt';
 
   const match: Record<string, unknown> = {};
-  if (category) match.category = category;
+  
+  if (category) {
+    match.category = { $regex: new RegExp(`^${category}$`, 'i') };
+  }
+  
   if (search) match.$text = { $search: search };
 
   const sortStage: Record<string, 1 | -1 | { $meta: 'textScore' }> =
@@ -170,7 +180,7 @@ export const getAllBlogs = asyncHandler(async (req: Request, res: Response) => {
         commentsCount: { $size: { $ifNull: ['$comments', []] } },
       },
     },
-    ...(search ? [{ $addFields: { score: { $meta: 'textScore' } } }] : []),
+    ...(search ? [{ $addFields: { score: { $meta: 'textScore' } } }] as PipelineStage[] : []),
     { $sort: sortStage },
     {
       $facet: {
@@ -213,13 +223,13 @@ export const getAllBlogs = asyncHandler(async (req: Request, res: Response) => {
     throw error;
   }
 
-  const total = result.metadata[0]?.total || 0;
+  const total = result?.metadata?.[0]?.total || 0;
 
   return res.status(200).json(
     new ApiResponse(
       200,
       {
-        blogs: result.data,
+        blogs: result?.data || [],
         pagination: {
           page,
           limit,
@@ -232,10 +242,9 @@ export const getAllBlogs = asyncHandler(async (req: Request, res: Response) => {
   );
 });
 
-
-// GET /api/v1/blogs/:slug → getBlogBySlug
-// Purpose: Retrieve a single blog post using its SEO-friendly slug
-
+// ---------------------------------------------------------------------------
+// GET /api/v1/blogs/:slug (Single Blog Page)
+// ---------------------------------------------------------------------------
 export const getBlogBySlug = asyncHandler(async (req: BlogRequest, res: Response) => {
   const { slug } = req.params;
 
@@ -248,21 +257,24 @@ export const getBlogBySlug = asyncHandler(async (req: BlogRequest, res: Response
   if (!blog) {
     throw new ApiError(404, 'Blog not found');
   }
-    const userId = req.user?._id?.toString();
+
+  const userId = req.user?._id?.toString();
 
   const responseBody: Record<string, unknown> = blog.toObject();
-  responseBody.likesCount = blog.likes.length;
+  const likesArray = Array.isArray(blog.likes) ? blog.likes : [];
+
+  responseBody.likesCount = likesArray.length;
   responseBody.isLikedByUser = userId
-  ? blog.likes.includes(userId)
-  : false;
+    ? likesArray.some((id: unknown) => id?.toString() === userId)
+    : false;
 
   return res.status(200).json(new ApiResponse(200, responseBody, 'Blog fetched successfully'));
 });
 
 
+
 // PUT /api/v1/blogs/:id → updateBlog
 // Purpose: Update blog content or cover image
-
 
 // DELETE /api/v1/blogs/:id → deleteBlog
 // Purpose: Delete a blog post from the database

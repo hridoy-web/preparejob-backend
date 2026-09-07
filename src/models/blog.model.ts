@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IComment {
+  _id?: mongoose.Types.ObjectId;
   userId: string;
   userName: string;
   userImage?: string;
@@ -54,15 +55,15 @@ const blogSchema = new Schema<IBlog>(
       type: String,
       required: [true, 'Blog content is required'],
     },
-   bannerImage: {
+    bannerImage: {
       url: {
-         type: String,
-         required: [true, 'Banner image URL is required']
-           },
+        type: String,
+        required: [true, 'Banner image URL is required'],
+      },
       publicId: {
-         type: String,
-         required: [true, 'Banner image publicId is required'] 
-       },
+        type: String,
+        required: [true, 'Banner image publicId is required'],
+      },
     },
     category: {
       type: String,
@@ -81,7 +82,7 @@ const blogSchema = new Schema<IBlog>(
 
 blogSchema.index({
   title: 'text',
-  content: 'text' 
-  });
+  content: 'text',
+});
 
 export const Blog = mongoose.models.Blog || mongoose.model<IBlog>('Blog', blogSchema);
