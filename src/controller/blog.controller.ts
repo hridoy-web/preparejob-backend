@@ -4,25 +4,33 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { ApiError } from '../utils/ApiError.js';
 import { ApiResponse } from '../utils/ApiResponse.js';
 import { deleteFromCloudinary, uploadOnCloudinary } from '../utils/cloudinary.js';
-import { PipelineStage } from 'mongoose';
+import { PipelineStage, Types } from 'mongoose';
+import { IUser } from '../models/user.model.js';
 
 const MAX_LIMIT = 50;
 const DEFAULT_LIMIT = 10;
 const SORTABLE_FIELDS = ['createdAt', 'title'] as const;
 type SortableField = (typeof SORTABLE_FIELDS)[number];
+type BlogRequest = Request & { user?: IUser };
 
-/** Converts a title into a URL-safe slug. Pure string function, no DB access. */
+const isValidObjectId = (id: string) => Types.ObjectId.isValid(id);
+
 const slugify = (text: string): string =>
   text
     .toString()
     .trim()
     .toLowerCase()
-    .replace(/[^\w\s-]/g, '') // strip punctuation
-    .replace(/[\s_]+/g, '-') // spaces/underscores -> hyphen
-    .replace(/^-+|-+$/g, ''); // trim leading/trailing hyphens
+    .replace(/[^\w\s-]/g, '') 
+    .replace(/[\s_]+/g, '-') 
+    .replace(/^-+|-+$/g, ''); 
 
 const generateUniqueSlug = async (title: string, excludeId?: string): Promise<string> => {
   const base = slugify(title);
+
+  if (!base) {
+    throw new ApiError(400, 'Title must contain at least one letter or number');
+  }
+
   let slug = base;
   let counter = 1;
 
@@ -83,7 +91,6 @@ export const createBlog = asyncHandler(async (req: Request, res: Response) => {
         ...(trimmedReadTime ? { readTime: trimmedReadTime } : {}),
       });
 
-      // Success
       return res.status(201).json(new ApiResponse(201, blog, 'Blog created successfully'));
     } catch (error: any) {
       const isDuplicateSlug = error?.code === 11000 && error?.keyPattern?.slug;
@@ -109,7 +116,7 @@ const parsePositiveInt = (value: unknown, fallback: number): number => {
   if (typeof value !== 'string') return fallback;
 
   const trimmed = value.trim();
-  if (!/^\d+$/.test(trimmed)) return fallback; // rejects floats, negatives, letters, exponents, empty string
+  if (!/^\d+$/.test(trimmed)) return fallback;
 
   const parsed = Number(trimmed);
   if (!Number.isSafeInteger(parsed) || parsed < 1) return fallback;
@@ -120,11 +127,10 @@ const parsePositiveInt = (value: unknown, fallback: number): number => {
 const getStringQueryParam = (value: unknown): string | undefined =>
   typeof value === 'string' ? value : undefined;
 
-/** Type-predicate guard - the correct way to narrow to SortableField without an `as` assertion. */
 const isSortableField = (value: string): value is SortableField =>
   (SORTABLE_FIELDS as readonly string[]).includes(value);
 
-const MAX_SKIP = 10_000; // ~1,000 pages at the default limit of 10
+const MAX_SKIP = 10_000;
 
 export const getAllBlogs = asyncHandler(async (req: Request, res: Response) => {
   const page = parsePositiveInt(req.query.page, 1);
@@ -230,8 +236,33 @@ export const getAllBlogs = asyncHandler(async (req: Request, res: Response) => {
 // GET /api/v1/blogs/:slug → getBlogBySlug
 // Purpose: Retrieve a single blog post using its SEO-friendly slug
 
-// PUT /api/v1/blogs/:id → updateBlog
-// Purpose: Update blog content or cover image
+const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const getSingleParam = (value: string | string[] | undefined): string | undefined =>
+  Array.isArray(value) ? value[0] : value;
+
+export const getBlogBySlug = asyncHandler(async (req: BlogRequest, res: Response) => {
+  const rawSlug = getSingleParam(req.params.slug);
+  const slug = rawSlug?.trim().toLowerCase();
+
+  if (!slug || !SLUG_PATTERN.test(slug)) {
+    throw new ApiError(400, 'Invalid slug format');
+  }
+
+  const blog = await Blog.findOne({ slug });
+  if (!blog) {
+    throw new ApiError(404, 'Blog not found');
+  }
+    const userId = req.user?._id?.toString();
+
+  const responseBody: Record<string, unknown> = blog.toObject();
+  responseBody.likesCount = blog.likes.length;
+  responseBody.isLikedByUser = userId
+  ? blog.likes.includes(userId)
+  : false;
+
+  return res.status(200).json(new ApiResponse(200, responseBody, 'Blog fetched successfully'));
+});
+
 
 // DELETE /api/v1/blogs/:id → deleteBlog
 // Purpose: Delete a blog post from the database
