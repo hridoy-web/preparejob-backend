@@ -1,5 +1,4 @@
-import { v2 as cloudinary } from 'cloudinary';
-import fs from 'fs';
+import { v2 as cloudinary, UploadApiResponse } from 'cloudinary';
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -7,29 +6,27 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-export const uploadOnCloudinary = async (localFilePath: string) => {
-  try {
-    if (!localFilePath) return null;
-    const response = await cloudinary.uploader.upload(localFilePath, {
-      resource_type: 'auto',
-    });
-
-    if (fs.existsSync(localFilePath)) {
-      fs.unlinkSync(localFilePath);
-    }
-    return response;
-  } catch (error) {
-    if (fs.existsSync(localFilePath)) {
-      fs.unlinkSync(localFilePath);
-    }
-    return null;
-  }
+export const uploadOnCloudinary = async (fileBuffer: Buffer): Promise<UploadApiResponse | null> => {
+  return new Promise((resolve) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      { resource_type: 'auto' },
+      (error, result) => {
+        if (error) {
+          console.error('[Cloudinary Upload Error]:', error);
+          return resolve(null);
+        }
+        resolve(result || null);
+      }
+    );
+    uploadStream.end(fileBuffer);
+  });
 };
 
 export const deleteFromCloudinary = async (publicId: string) => {
   try {
     return await cloudinary.uploader.destroy(publicId);
-  } catch {
+  } catch (error) {
+    console.error(`[deleteFromCloudinary] Failed to delete asset ${publicId}:`, error);
     return null;
   }
 };
