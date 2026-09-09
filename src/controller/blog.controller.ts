@@ -273,17 +273,246 @@ export const getBlogBySlug = asyncHandler(async (req: BlogRequest, res: Response
 
 
 
-// PUT /api/v1/blogs/:id → updateBlog
-// Purpose: Update blog content or cover image
+// ---------------------------------------------------------------------------
+// PUT /api/v1/blogs/:id → updateBlog   (admin only - enforced in routes.ts)
+// ---------------------------------------------------------------------------
 
-// DELETE /api/v1/blogs/:id → deleteBlog
-// Purpose: Delete a blog post from the database
+const isDuplicateKeyError = (error: unknown, field: string): boolean => {
+  if (typeof error !== 'object' || error === null) return false;
+  const err = error as { code?: unknown; keyPattern?: unknown };
+  return (
+    err.code === 11000 &&
+    typeof err.keyPattern === 'object' &&
+    err.keyPattern !== null &&
+    field in err.keyPattern
+  );
+};
+export const updateBlog = asyncHandler(async (req: BlogRequest, res: Response) => {
+  const { id } = req.params;
 
+  if (!id || typeof id !== 'string' || !isValidObjectId(id)) {
+    throw new ApiError(400, 'Invalid blog id');
+  }
+
+  const blog = await Blog.findById(id);
+  if (!blog) throw new ApiError(404, 'Blog not found');
+
+  const { title, content, category, readTime } = req.body;
+
+  if (title !== undefined) {
+    if (typeof title !== 'string') throw new ApiError(400, 'title must be a string');
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) throw new ApiError(400, 'title cannot be empty');
+    if (trimmedTitle !== blog.title) {
+      blog.title = trimmedTitle;
+      blog.slug = await generateUniqueSlug(trimmedTitle, id);
+    }
+  }
+
+  if (content !== undefined) {
+    if (typeof content !== 'string') throw new ApiError(400, 'content must be a string');
+    const trimmedContent = content.trim();
+    if (!trimmedContent) throw new ApiError(400, 'content cannot be empty');
+    blog.content = trimmedContent;
+  }
+
+  if (category !== undefined) {
+    if (typeof category !== 'string') throw new ApiError(400, 'category must be a string');
+    const normalized = normalizeCategory(category);
+    if (!normalized) throw new ApiError(400, 'category cannot be empty');
+    blog.category = normalized;
+  }
+
+  if (readTime !== undefined) {
+    if (typeof readTime !== 'string') throw new ApiError(400, 'readTime must be a string');
+    const trimmedReadTime = readTime.trim();
+    if (!trimmedReadTime) throw new ApiError(400, 'readTime cannot be empty');
+    blog.readTime = trimmedReadTime;
+  }
+
+  // uploadOnCloudinary already deletes the local temp file on both success
+  // and failure - no cleanup needed here, adding one would duplicate that
+  // responsibility.
+  let newUploadPublicId: string | null = null;
+  let oldPublicId: string | null = null;
+
+  if (req.file) {
+    const uploadResult = await uploadOnCloudinary(req.file.path);
+    if (!uploadResult) {
+      throw new ApiError(500, 'Failed to upload new banner image');
+    }
+
+    newUploadPublicId = uploadResult.public_id;
+    oldPublicId = blog.bannerImage.publicId;
+    blog.bannerImage = { url: uploadResult.secure_url, publicId: uploadResult.public_id };
+  }
+
+  try {
+    await blog.save();
+  } catch (error: unknown) {
+    const isDuplicateSlug = isDuplicateKeyError(error, 'slug');
+
+    // deleteFromCloudinary never throws (it catches and logs internally),
+    // so this call can't mask the real save() error below.
+    if (newUploadPublicId) {
+      await deleteFromCloudinary(newUploadPublicId);
+    }
+
+    if (isDuplicateSlug) {
+      throw new ApiError(409, 'Slug already exists, please modify the title');
+    }
+    throw error instanceof Error ? error : new ApiError(500, 'Failed to update blog');
+  }
+
+  // save() succeeded - the update is a success from the client's point of
+  // view regardless of what happens next. A failure here is logged inside
+  // deleteFromCloudinary and never surfaces as an API error.
+  if (oldPublicId) {
+    await deleteFromCloudinary(oldPublicId);
+  }
+
+  return res.status(200).json(new ApiResponse(200, blog, 'Blog updated successfully'));
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/v1/blogs/:id → deleteBlog   (admin only - enforced in routes.ts)
+// ---------------------------------------------------------------------------
+export const deleteBlog = asyncHandler(async (req: Request, res: Response) => {
+  const { id } = req.params;
+
+  if (!id || typeof id !== 'string' || !isValidObjectId(id)) {
+    throw new ApiError(400, 'Invalid blog id');
+  }
+
+  const blog = await Blog.findById(id);
+  if (!blog) throw new ApiError(404, 'Blog not found');
+
+  const publicId = blog.bannerImage.publicId;
+
+  await blog.deleteOne();
+
+  await deleteFromCloudinary(publicId);
+
+  return res.status(200).json(new ApiResponse(200, { _id: id }, 'Blog deleted successfully'));
+});
+
+// ---------------------------------------------------------------------------
 // PATCH /api/v1/blogs/:id/like → toggleLikeBlog
-// Purpose: Toggle like/unlike count for a blog post
+// ---------------------------------------------------------------------------
+export const toggleLikeBlog = asyncHandler(async (req: BlogRequest, res: Response) => {
+  const { id } = req.params;
+  if (!id || typeof id !== 'string' || !isValidObjectId(id)) {
+    throw new ApiError(400, 'Invalid blog id');
+  }
 
+  const { userId } = req.body;
+  if (!userId || typeof userId !== 'string' || !isValidObjectId(userId)) {
+    throw new ApiError(400, 'Valid user id is required');
+  }
+
+  const blog = await Blog.findByIdAndUpdate(
+    id,
+    [
+      {
+        $set: {
+          likes: {
+            $cond: {
+              if: { $in: [userId, { $ifNull: ['$likes', []] }] },
+              then: { $setDifference: ['$likes', [userId]] },
+              else: { $concatArrays: [{ $ifNull: ['$likes', []] }, [userId]] },
+            },
+          },
+        },
+      },
+    ],
+    { new: true, updatePipeline: true }
+  ).select('likes');
+
+  if (!blog) throw new ApiError(404, 'Blog not found');
+
+  const liked = blog.likes.includes(userId);
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, { liked, likesCount: blog.likes.length }, liked ? 'Blog liked' : 'Blog unliked'));
+});
+
+
+
+// ---------------------------------------------------------------------------
 // POST /api/v1/blogs/:id/comment → addComment
-// Purpose: Add a new user comment to a blog post
+// ---------------------------------------------------------------------------
+export const addComment = asyncHandler(async (req: BlogRequest, res: Response) => {
+  const { id } = req.params;
+  if (!id || typeof id !== 'string' || !isValidObjectId(id)) {
+    throw new ApiError(400, 'Invalid blog id');
+  }
 
+  const { userId, userName, userImage, commentText } = req.body;
+
+  if (!userId || typeof userId !== 'string' || !isValidObjectId(userId)) {
+    throw new ApiError(400, 'Valid user id is required');
+  }
+  if (typeof userName !== 'string' || !userName.trim()) {
+    throw new ApiError(400, 'userName is required');
+  }
+  if (typeof commentText !== 'string') {
+    throw new ApiError(400, 'commentText is required');
+  }
+
+  const comment = commentText.trim();
+  if (!comment) throw new ApiError(400, 'Comment cannot be empty');
+  if (comment.length > 500) throw new ApiError(400, 'Comment cannot exceed 500 characters');
+
+  const newComment = {
+    userId,
+    userName: userName.trim(),
+    userImage: typeof userImage === 'string' ? userImage : undefined,
+    commentText: comment,
+  };
+
+  const blog = await Blog.findByIdAndUpdate
+  (id, { $push: { comments: newComment } },
+     { new: true }).select(
+    'comments'
+  );
+
+  if (!blog) throw new ApiError(404, 'Blog not found');
+
+  const savedComment = blog.comments[blog.comments.length - 1];
+
+  return res.status(201).json(new ApiResponse(201, savedComment, 'Comment added successfully'));
+});
+
+// ---------------------------------------------------------------------------
 // DELETE /api/v1/blogs/:id/comment/:commentId → deleteComment
-// Purpose: Remove a specific comment from a blog post
+// ---------------------------------------------------------------------------
+export const deleteComment = asyncHandler(async (req: BlogRequest, res: Response) => {
+  const { id, commentId } = req.params;
+
+  if (!id || typeof id !== 'string' || !isValidObjectId(id)) {
+    throw new ApiError(400, 'Invalid blog id');
+  }
+  if (!commentId || typeof commentId !== 'string' || !isValidObjectId(commentId)) {
+    throw new ApiError(400, 'Invalid comment id');
+  }
+
+  const { userId } = req.body;
+  if (!userId || typeof userId !== 'string' || !isValidObjectId(userId)) {
+    throw new ApiError(400, 'Valid user id is required');
+  }
+
+  const blog = await Blog.findById(id).select('comments');
+  if (!blog) throw new ApiError(404, 'Blog not found');
+
+  const comment = blog.comments.id(commentId);
+  if (!comment) throw new ApiError(404, 'Comment not found');
+
+  if (comment.userId !== userId) {
+    throw new ApiError(403, 'You are not allowed to delete this comment');
+  }
+
+  await Blog.updateOne({ _id: id }, { $pull: { comments: { _id: commentId } } });
+
+  return res.status(200).json(new ApiResponse(200, { _id: commentId }, 'Comment deleted successfully'));
+});

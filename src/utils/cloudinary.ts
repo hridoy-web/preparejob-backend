@@ -29,7 +29,8 @@ export const uploadOnCloudinary = async (localFilePath: string) => {
 export const deleteFromCloudinary = async (publicId: string) => {
   try {
     return await cloudinary.uploader.destroy(publicId);
-  } catch {
+  } catch (error) {
+    console.error(`[deleteFromCloudinary] Failed to delete asset ${publicId}:`, error);
     return null;
   }
 };
