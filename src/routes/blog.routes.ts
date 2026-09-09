@@ -1,18 +1,36 @@
 import { Router } from 'express';
 import { upload } from '../middlewares/multer.middleware.js';
-import { addComment, createBlog, deleteBlog, deleteComment, getAllBlogs, getBlogBySlug, toggleLikeBlog, updateBlog } from '../controller/blog.controller.js';
+import {
+  addComment,
+  createBlog,
+  deleteBlog,
+  deleteComment,
+  getAllBlogs,
+  getBlogBySlug,
+  toggleLikeBlog,
+  updateBlog,
+} from '../controller/blog.controller.js';
 
 const router = Router();
 
-// Routes for Blog Module
+// Create & Get All Blogs
+router.route('/')
+  .post(upload.single('bannerImage'), createBlog)
+  .get(getAllBlogs);
 
-router.post('/', upload.single('bannerImage'), createBlog);
-router.get('/', getAllBlogs);
-router.get('/:slug', getBlogBySlug);
-router.put('/:id', upload.single('bannerImage'), updateBlog);
-router.delete('/:id', deleteBlog);
+// Get Single Blog by Slug
+router.get('/slug/:slug', getBlogBySlug);
+
+// Update & Delete Blog by ID
+router.route('/:id')
+  .patch(upload.single('bannerImage'), updateBlog)
+  .delete(deleteBlog);
+
+// Toggle Like
 router.patch('/:id/like', toggleLikeBlog);
-router.post('/:id/comment', addComment);
-router.delete('/:id/comment/:commentId', deleteComment);
+
+// Comments Handling
+router.post('/:id/comments', addComment);
+router.delete('/:id/comments/:commentId', deleteComment);
 
 export default router;

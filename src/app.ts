@@ -1,7 +1,7 @@
 import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 
-// import questionRouter from './routes/question.routes.js'
+// Router Imports
 import blogRouter from './routes/blog.routes.js';
 import userRouter from './routes/user.routes.js';
 import adminRouter from './routes/admin.routes.js';
@@ -10,12 +10,18 @@ import questionRouter from './routes/question.routes.js';
 const app: Application = express();
 
 // Middlewares
-app.use(express.json());
-app.use(cors());
+app.use(cors({
+    origin: process.env.CORS_ORIGIN || '*',
+    credentials: true
+}));
 
-// Server Check
+app.use(express.json({ limit: '16kb' }));
+app.use(express.urlencoded({ extended: true, limit: '16kb' }));
+
+// Health Check Endpoint
 app.get('/', (req: Request, res: Response) => {
     res.status(200).json({
+        success: true,
         message: 'PrepareJob API is running smoothly!'
     });
 });
