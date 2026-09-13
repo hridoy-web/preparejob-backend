@@ -8,7 +8,8 @@ import { PipelineStage, Types } from 'mongoose';
 import { IUser } from '../models/user.model.js';
 
 const MAX_LIMIT = 50;
-const DEFAULT_LIMIT = 10;
+const DEFAULT_LIMIT = 7;
+const MAX_SKIP = 10_000;
 const SORTABLE_FIELDS = ['createdAt', 'title'] as const;
 type SortableField = (typeof SORTABLE_FIELDS)[number];
 
@@ -17,22 +18,28 @@ export interface BlogRequest extends Request {
   file?: Express.Multer.File;
 }
 
-const isValidObjectId = (id: string) => Types.ObjectId.isValid(id);
+// ==========================================
+// HELPER FUNCTIONS
+// ==========================================
 
-const slugify = (text: string): string =>
-  text
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
+const isValidObjectId = (id: string): boolean => Types.ObjectId.isValid(id);
+
+const slugify = (text: string): string => {
+  const str = text.toString().trim().toLowerCase();
+  
+  const slug = str
+    .replace(/[^\p{L}\p{N}\s-]/gu, '')
     .replace(/[\s_]+/g, '-')
     .replace(/^-+|-+$/g, '');
+
+  return slug || `blog-${Date.now()}`;
+};
 
 const generateUniqueSlug = async (title: string, excludeId?: string): Promise<string> => {
   const base = slugify(title);
 
   if (!base) {
-    throw new ApiError(400, 'Title must contain at least one letter or number');
+    throw new ApiError(400, 'Title must contain at least one valid character');
   }
 
   let slug = base;
@@ -48,12 +55,43 @@ const generateUniqueSlug = async (title: string, excludeId?: string): Promise<st
 
 const normalizeCategory = (value: string): string => value.trim().replace(/\s+/g, ' ');
 
-const escapeRegex = (text: string) => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+const escapeRegex = (text: string): string => text.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+
+const parsePositiveInt = (value: unknown, fallback: number): number => {
+  if (typeof value !== 'string') return fallback;
+
+  const trimmed = value.trim();
+  if (!/^\d+$/.test(trimmed)) return fallback;
+
+  const parsed = Number(trimmed);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) return fallback;
+
+  return parsed;
+};
+
+const getStringQueryParam = (value: unknown): string | undefined =>
+  typeof value === 'string' ? value : undefined;
+
+const isSortableField = (value: string): value is SortableField =>
+  (SORTABLE_FIELDS as readonly string[]).includes(value);
+
+const isDuplicateKeyError = (error: unknown, field: string): boolean => {
+  if (typeof error !== 'object' || error === null) return false;
+  const err = error as { code?: unknown; keyPattern?: unknown };
+  return (
+    err.code === 11000 &&
+    typeof err.keyPattern === 'object' &&
+    err.keyPattern !== null &&
+    field in err.keyPattern
+  );
+};
 
 // ==========================================
+// API CONTROLLERS
+// ==========================================
+
 // API 1: Create a New Blog (Admin)
 // Endpoint: POST /api/v1/blogs
-// ==========================================
 export const createBlog = asyncHandler(async (req: BlogRequest, res: Response) => {
   const { title, content, category, readTime } = req.body;
 
@@ -110,31 +148,8 @@ export const createBlog = asyncHandler(async (req: BlogRequest, res: Response) =
   }
 });
 
-// Helper Functions for getAllBlogs
-const parsePositiveInt = (value: unknown, fallback: number): number => {
-  if (typeof value !== 'string') return fallback;
-
-  const trimmed = value.trim();
-  if (!/^\d+$/.test(trimmed)) return fallback;
-
-  const parsed = Number(trimmed);
-  if (!Number.isSafeInteger(parsed) || parsed < 1) return fallback;
-
-  return parsed;
-};
-
-const getStringQueryParam = (value: unknown): string | undefined =>
-  typeof value === 'string' ? value : undefined;
-
-const isSortableField = (value: string): value is SortableField =>
-  (SORTABLE_FIELDS as readonly string[]).includes(value);
-
-const MAX_SKIP = 10_000;
-
-// ==========================================
 // API 2: Get All Blogs (With Pagination, Search, Filter)
 // Endpoint: GET /api/v1/blogs
-// ==========================================
 export const getAllBlogs = asyncHandler(async (req: Request, res: Response) => {
   const page = parsePositiveInt(req.query.page, 1);
   const limit = Math.min(parsePositiveInt(req.query.limit, DEFAULT_LIMIT), MAX_LIMIT);
@@ -239,17 +254,15 @@ export const getAllBlogs = asyncHandler(async (req: Request, res: Response) => {
   );
 });
 
-// ==========================================
 // API 3: Get Single Blog Details by Slug
 // Endpoint: GET /api/v1/blogs/:slug
-// ==========================================
 export const getBlogBySlug = asyncHandler(async (req: BlogRequest, res: Response) => {
   const { slug } = req.params;
 
   if (!slug || typeof slug !== 'string') {
     throw new ApiError(400, 'Slug is required');
   }
-  const normalizedSlug = slug.trim().toLowerCase();
+  const normalizedSlug = decodeURIComponent(slug).trim().toLowerCase();
 
   const blog = await Blog.findOne({ slug: normalizedSlug });
   if (!blog) {
@@ -269,22 +282,8 @@ export const getBlogBySlug = asyncHandler(async (req: BlogRequest, res: Response
   return res.status(200).json(new ApiResponse(200, responseBody, 'Blog fetched successfully'));
 });
 
-// Helper Function for updateBlog
-const isDuplicateKeyError = (error: unknown, field: string): boolean => {
-  if (typeof error !== 'object' || error === null) return false;
-  const err = error as { code?: unknown; keyPattern?: unknown };
-  return (
-    err.code === 11000 &&
-    typeof err.keyPattern === 'object' &&
-    err.keyPattern !== null &&
-    field in err.keyPattern
-  );
-};
-
-// ==========================================
 // API 4: Update Existing Blog by ID
 // Endpoint: PATCH /api/v1/blogs/:id
-// ==========================================
 export const updateBlog = asyncHandler(async (req: BlogRequest, res: Response) => {
   const { id } = req.params;
 
@@ -382,10 +381,8 @@ export const updateBlog = asyncHandler(async (req: BlogRequest, res: Response) =
   return res.status(200).json(new ApiResponse(200, blog, 'Blog updated successfully'));
 });
 
-// ==========================================
 // API 5: Delete Blog by ID
 // Endpoint: DELETE /api/v1/blogs/:id
-// ==========================================
 export const deleteBlog = asyncHandler(async (req: Request, res: Response) => {
   const { id } = req.params;
 
@@ -407,10 +404,8 @@ export const deleteBlog = asyncHandler(async (req: Request, res: Response) => {
   return res.status(200).json(new ApiResponse(200, { _id: id }, 'Blog deleted successfully'));
 });
 
-// ==========================================
 // API 6: Toggle Like / Unlike on a Blog
 // Endpoint: PATCH /api/v1/blogs/:id/like
-// ==========================================
 export const toggleLikeBlog = asyncHandler(async (req: BlogRequest, res: Response) => {
   const { id } = req.params;
   if (!id || typeof id !== 'string' || !isValidObjectId(id)) {
@@ -449,10 +444,8 @@ export const toggleLikeBlog = asyncHandler(async (req: BlogRequest, res: Respons
     .json(new ApiResponse(200, { liked, likesCount: blog.likes.length }, liked ? 'Blog liked' : 'Blog unliked'));
 });
 
-// ==========================================
 // API 7: Add a Comment to a Blog
 // Endpoint: POST /api/v1/blogs/:id/comments
-// ==========================================
 export const addComment = asyncHandler(async (req: BlogRequest, res: Response) => {
   const { id } = req.params;
   if (!id || typeof id !== 'string' || !isValidObjectId(id)) {
@@ -496,10 +489,8 @@ export const addComment = asyncHandler(async (req: BlogRequest, res: Response) =
   return res.status(201).json(new ApiResponse(201, savedComment, 'Comment added successfully'));
 });
 
-// ==========================================
 // API 8: Delete a Comment from a Blog
 // Endpoint: DELETE /api/v1/blogs/:id/comments/:commentId
-// ==========================================
 export const deleteComment = asyncHandler(async (req: BlogRequest, res: Response) => {
   const { id, commentId } = req.params;
 
