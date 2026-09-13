@@ -24,34 +24,13 @@ export interface BlogRequest extends Request {
 
 const isValidObjectId = (id: string): boolean => Types.ObjectId.isValid(id);
 
-const banglaToEnglishMap: Record<string, string> = {
-  'অ': 'o', 'আ': 'a', 'ই': 'i', 'ঈ': 'i', 'উ': 'u', 'ঊ': 'u', 'ঋ': 'ri', 'এ': 'e', 'ঐ': 'oi', 'ও': 'o', 'ঔ': 'ou',
-  'ক': 'k', 'খ': 'kh', 'গ': 'g', 'ঘ': 'gh', 'ঙ': 'ng', 'চ': 'ch', 'ছ': 'ch', 'জ': 'j', 'ঝ': 'jh', 'ঞ': 'n',
-  'ট': 't', 'ঠ': 'th', 'ড': 'd', 'ঢ': 'dh', 'ণ': 'n', 'ত': 't', 'থ': 'th', 'দ': 'd', 'ধ': 'dh', 'ন': 'n',
-  'প': 'p', 'ফ': 'f', 'ব': 'b', 'ভ': 'v', 'ম': 'm', 'য': 'y', 'র': 'r', 'ল': 'l', 'শ': 'sh', 'ষ': 'sh',
-  'স': 's', 'হ': 'h', 'ড়': 'r', 'ঢ়': 'rh', 'য়': 'y', 'ৎ': 't', 'ং': 'ng', 'ঃ': 'h', 'ঁ': '',
-  'া': 'a', 'ি': 'i', 'ী': 'i', 'ু': 'u', 'ূ': 'u', 'ৃ': 'ri', 'ে': 'e', 'ৈ': 'oi', 'ো': 'o', 'ৌ': 'ou',
-  '্': '', 'ৗ': 'ou',
-  '০': '0', '১': '1', '২': '2', '৩': '3', '৪': '4', '৫': '5', '৬': '6', '৭': '7', '৮': '8', '৯': '9'
-};
-
-const transliterateBangla = (text: string): string => {
-  return text
-    .split('')
-    .map((char) => banglaToEnglishMap[char] || char)
-    .join('');
-};
-
 const slugify = (text: string): string => {
-  const convertedText = transliterateBangla(text);
+  const str = text.toString().trim().toLowerCase();
   
-  const slug = convertedText
-    .toString()
-    .trim()
-    .toLowerCase()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  const slug = str
+    .replace(/[^\p{L}\p{M}\p{N}\s-]/gu, '') 
+    .replace(/[\s_]+/g, '-')                 
+    .replace(/^-+|-+$/g, '');                
 
   return slug || `blog-${Date.now()}`;
 };
