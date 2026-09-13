@@ -44,12 +44,23 @@ export const getAllQuestions = asyncHandler(async (req: Request, res: Response) 
 
   const filter: Record<string, unknown> = {};
 
+  // Technology Filter
   if (req.query.technology) {
     filter.technology = (req.query.technology as string).toLowerCase();
   }
 
+  // Difficulty Filter
   if (req.query.difficulty) {
     filter.difficulty = req.query.difficulty as string;
+  }
+
+  // Search Filter (Title & ImportanceTag Search)
+  if (req.query.search) {
+    const searchRegex = new RegExp(req.query.search as string, 'i');
+    filter.$or = [
+      { title: searchRegex },
+      { importanceTag: searchRegex }
+    ];
   }
 
   const questions = await Question.find(filter)
@@ -63,7 +74,7 @@ export const getAllQuestions = asyncHandler(async (req: Request, res: Response) 
     questions,
     pagination: {
       currentPage: page,
-      totalPages: Math.ceil(totalQuestions / limit),
+      totalPages: Math.ceil(totalQuestions / limit) || 1,
       totalQuestions,
       limit,
     },
