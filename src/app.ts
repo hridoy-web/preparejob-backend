@@ -9,9 +9,21 @@ import questionRouter from './routes/question.routes.js';
 
 const app: Application = express();
 
+const allowedOrigins = [
+    'https://preparejob.infozia.site',
+    'http://localhost:3000',
+    'http://localhost:5173'
+];
+
 // Middlewares
 app.use(cors({
-    origin: process.env.CORS_ORIGIN || '*',
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true
 }));
 
