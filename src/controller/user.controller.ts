@@ -90,6 +90,10 @@ export const getUserLikedBlogs = asyncHandler(async (req: Request, res: Response
     throw new ApiError(400, 'userId is required');
   }
 
+  if (!mongoose.Types.ObjectId.isValid(targetUserId)) {
+    throw new ApiError(400, 'Invalid userId format');
+  }
+
   const likedBlogs = await Blog.find({ likes: targetUserId });
 
   return res.status(200).json(
@@ -105,9 +109,84 @@ export const getUserCommentedBlogs = asyncHandler(async (req: Request, res: Resp
     throw new ApiError(400, 'userId is required');
   }
 
+  if (!mongoose.Types.ObjectId.isValid(targetUserId)) {
+    throw new ApiError(400, 'Invalid userId format');
+  }
+
   const commentedBlogs = await Blog.find({ 'comments.userId': targetUserId });
 
   return res.status(200).json(
     new ApiResponse(200, commentedBlogs, 'Commented blogs fetched successfully')
+  );
+});
+
+// PATCH /api/v1/user/blogs/:blogId/like → toggleBlogLike
+export const toggleBlogLike = asyncHandler(async (req: Request, res: Response) => {
+  const blogId = parseParamId(req.params.blogId);
+  const { userId } = req.body;
+
+  if (!userId || !blogId) {
+    throw new ApiError(400, 'userId and blogId are required');
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(userId) || !mongoose.Types.ObjectId.isValid(blogId)) {
+    throw new ApiError(400, 'Invalid userId or blogId format');
+  }
+
+  const blog = await Blog.findById(blogId);
+  if (!blog) {
+    throw new ApiError(404, 'Blog not found');
+  }
+
+  const hasLiked = blog.likes.some((id: mongoose.Types.ObjectId | string) =>
+    id.toString() === userId.toString()
+  );
+
+  const update = hasLiked
+    ? { $pull: { likes: userId } }
+    : { $addToSet: { likes: userId } };
+
+  const updatedBlog = await Blog.findByIdAndUpdate(blogId, update, { new: true });
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      updatedBlog,
+      hasLiked ? 'Blog unliked successfully' : 'Blog liked successfully'
+    )
+  );
+});
+
+// GET /api/v1/user/stats/:userId → getUserStats
+export const getUserStats = asyncHandler(async (req: Request, res: Response) => {
+  const targetUserId = parseParamId(req.params.userId);
+
+  if (!targetUserId) {
+    throw new ApiError(400, 'userId is required');
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(targetUserId)) {
+    throw new ApiError(400, 'Invalid userId format');
+  }
+
+  const user = await User.findById(targetUserId);
+  if (!user) {
+    throw new ApiError(404, 'User not found');
+  }
+
+  const bookmarksCount = user.bookmarks ? user.bookmarks.length : 0;
+  const likedBlogsCount = await Blog.countDocuments({ likes: targetUserId });
+  const commentedBlogsCount = await Blog.countDocuments({ 'comments.userId': targetUserId });
+
+  return res.status(200).json(
+    new ApiResponse(
+      200,
+      {
+        bookmarksCount,
+        likedBlogsCount,
+        commentedBlogsCount,
+      },
+      'User stats fetched successfully'
+    )
   );
 });
