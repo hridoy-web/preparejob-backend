@@ -10,15 +10,13 @@ export interface IAdvancedAnswer {
 }
 
 export type AllowedTechnology =
-  | 'html'
-  | 'css'
-  | 'tailwind'
+  | 'html5'
+  | 'css3'
+  | 'tailwind-css'
   | 'javascript'
   | 'typescript'
   | 'react'
   | 'nextjs'
-  | 'redux'
-  | 'tanstack-query'
   | 'nodejs'
   | 'expressjs'
   | 'mongodb'
@@ -30,6 +28,7 @@ export type AllowedTechnology =
   | 'docker';
 
 export interface IQuestion extends Document {
+  serial: number;
   title: string;
   technology: AllowedTechnology;
   difficulty: 'Easy' | 'Medium' | 'Hard';
@@ -42,6 +41,9 @@ export interface IQuestion extends Document {
 
 const questionSchema = new Schema<IQuestion>(
   {
+    serial: {
+      type: Number,
+    },
     title: {
       type: String,
       required: [true, 'Question title is required'],
@@ -53,22 +55,19 @@ const questionSchema = new Schema<IQuestion>(
       lowercase: true,
       trim: true,
       enum: [
-        'html',
-        'css',
-        'tailwind',
+        'html5',
+        'css3',
+        'tailwind-css',
         'javascript',
         'typescript',
         'react',
         'nextjs',
-        'redux',
-        'tanstack-query',
         'nodejs',
         'expressjs',
         'mongodb',
         'mongoose',
         'postgresql',
         'prisma',
-        'redis',
         'git-github',
         'docker',
       ],
@@ -99,6 +98,18 @@ const questionSchema = new Schema<IQuestion>(
   },
   { timestamps: true }
 );
+
+// Automatic Serial Generation Middleware
+questionSchema.pre('save', async function (next) {
+  if (this.isNew && !this.serial) {
+    const lastQuestion = await mongoose.model('Question')
+      .findOne({ technology: this.technology })
+      .sort({ serial: -1 });
+    
+    this.serial = lastQuestion ? lastQuestion.serial + 1 : 1;
+  }
+  (next as any)();
+});
 
 questionSchema.index({ technology: 1, difficulty: 1 });
 

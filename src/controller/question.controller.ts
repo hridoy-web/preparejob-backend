@@ -7,6 +7,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 // POST /api/v1/questions → createQuestion
 export const createQuestion = asyncHandler(async (req: Request, res: Response) => {
   const {
+    serial,
     title,
     technology,
     difficulty,
@@ -23,6 +24,7 @@ export const createQuestion = asyncHandler(async (req: Request, res: Response) =
   }
 
   const question = await Question.create({
+    serial,
     title,
     technology,
     difficulty,
@@ -64,7 +66,7 @@ export const getAllQuestions = asyncHandler(async (req: Request, res: Response) 
   }
 
   const questions = await Question.find(filter)
-    .sort({ createdAt: -1 })
+    .sort({ serial: 1 })
     .skip(skip)
     .limit(limit);
 
