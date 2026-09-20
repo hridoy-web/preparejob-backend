@@ -41,22 +41,19 @@ export const createQuestion = asyncHandler(async (req: Request, res: Response) =
 // GET /api/v1/questions → getAllQuestions
 export const getAllQuestions = asyncHandler(async (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string) || 1;
-  const limit = parseInt(req.query.limit as string) || 10;
+  const limit = parseInt(req.query.limit as string) || 100; 
   const skip = (page - 1) * limit;
 
   const filter: Record<string, unknown> = {};
 
-  // Technology Filter
   if (req.query.technology) {
     filter.technology = (req.query.technology as string).toLowerCase();
   }
 
-  // Difficulty Filter
   if (req.query.difficulty) {
     filter.difficulty = req.query.difficulty as string;
   }
 
-  // Search Filter (Title & ImportanceTag Search)
   if (req.query.search) {
     const searchRegex = new RegExp(req.query.search as string, 'i');
     filter.$or = [
