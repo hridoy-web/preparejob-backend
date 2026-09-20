@@ -100,7 +100,7 @@ const questionSchema = new Schema<IQuestion>(
 );
 
 // Automatic Serial Generation Middleware
-questionSchema.pre('save', async function (next) {
+questionSchema.pre('save', async function () {
   if (this.isNew && !this.serial) {
     const lastQuestion = await mongoose.model('Question')
       .findOne({ technology: this.technology })
@@ -108,7 +108,6 @@ questionSchema.pre('save', async function (next) {
     
     this.serial = lastQuestion ? lastQuestion.serial + 1 : 1;
   }
-  (next as any)();
 });
 
 questionSchema.index({ technology: 1, difficulty: 1 });
