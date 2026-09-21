@@ -98,12 +98,12 @@ preparejob-backend/
 
 ## 👥 Backend Development Team & Contributions
 
-| Contributor | GitHub Profile | Core Responsibilities & Modules |
-| :--- | :--- | :--- |
-| **Hridoy Chowdhury** *(Team Lead)* | [@hridoy-web](https://github.com/hridoy-web) | Handled overall backend setup, folder structure, Mongoose models, database configuration, Cloudinary setup, helper utilities (ApiError, ApiResponse, asyncHandler), and team workflow management. |
-| **Shihab Bhuiya** | [@shihab-bhuiya](https://github.com/shihab-bhuiya) | Developed the Question Module (question.controller.ts), handling question creation, filtering, search, updates, and pagination. |
-| **Shihab Ul Islam** | [@shihab-5](https://github.com/shihab-5) | Developed the Blog Module (blog.controller.ts), handling article creation, updates, reader interactions, comments, and likes. |
-| **Anim** | [@anim710](https://github.com/anim710) | Developed the User & Admin Tracking Modules (user.controller.ts & admin.controller.ts), managing system stats, user bookmarks, status toggling, and user management features. |
+| Developer & GitHub Profile | Core Responsibilities & Modules |
+| :--- | :--- |
+| **Hridoy Chowdhury** <br>*(Team Lead)* <br>[@hridoy-web](https://github.com/hridoy-web) | Handled overall backend setup, folder structure, Mongoose models, database configuration, Cloudinary setup, helper utilities (`ApiError`, `ApiResponse`, `asyncHandler`), and team workflow management. |
+| **Shihab Bhuiya** <br>[@shihab-bhuiya](https://github.com/shihab-bhuiya) | Developed the **Question Module** (`question.controller.ts`), handling question creation, filtering, search, updates, and pagination. |
+| **Shihab Ul Islam** <br>[@shihab-5](https://github.com/shihab-5) | Developed the **Blog Module** (`blog.controller.ts`), handling article creation, updates, reader interactions, comments, and likes. |
+| **Anim** <br>[@anim710](https://github.com/anim710) | Developed the **User & Admin Tracking Modules** (`user.controller.ts` & `admin.controller.ts`), managing system stats, user bookmarks, status toggling, and user management features. |
 
 ---
 
