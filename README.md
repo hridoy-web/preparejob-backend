@@ -4,7 +4,7 @@ Crack your dream tech interview with our powerful backend architecture. This rep
 
 <p align="left">
   <a href="https://github.com/hridoy-web/preparejob-frontend" target="_blank"><img src="https://img.shields.io/badge/💻_Frontend_REPOSITORY-18181b?style=for-the-badge&logo=github&logoColor=white" alt="Backend Repo" /></a> &nbsp;&nbsp;
-  <a href="https://preparejob.infozia.site" target="_blank"><img src="https://img.shields.io/badge/🌐_EXPLORE_LIVE_WEBSITE-0ea5e9?style=for-the-badge&logo=google-chrome&logoColor=white" alt="Live Site" /></a>
+  <a href="https://preparejob.vercel.app" target="_blank"><img src="https://img.shields.io/badge/🌐_EXPLORE_LIVE_WEBSITE-0ea5e9?style=for-the-badge&logo=google-chrome&logoColor=white" alt="Live Site" /></a>
 </p>
 
 ---
