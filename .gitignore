@@ -26,3 +26,12 @@ Thumbs.db
 # Temporary files & uploads
 public/temp/*
 !public/temp/.gitkeep
+
+# Environment variables & secrets (added by GitHub Guardian)
+.env.*
+*.env
+!.env.example
+!.env.sample
+.envrc
+.venv/
+venv/
