@@ -9,11 +9,6 @@ Crack your dream tech interview with our powerful backend architecture. This rep
 
 ---
 
-## 🔒 Terms of Use & Learning Policy
-> **This backend source code is strictly intended for personal learning and technical interview preparation. You are welcome to explore and study the architecture. However, you are not permitted to copy this code or its assets to claim them as your own or use them outside of personal educational purposes.**
-
----
-
 ## 📂 Project Architecture & Folder Structure
 
 ```text
